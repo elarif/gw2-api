@@ -17,7 +17,8 @@ TRANSMUTATION("Transmutation"),
 UNLOCK("Unlock"), 
 UPGRADE_REMOVAL("UpgradeRemoval"), 
 UTILITY("Utility"), 
-TELEPORT_TO_FRIEND("TeleportToFriend");
+TELEPORT_TO_FRIEND("TeleportToFriend"),
+RANDOM_UNLOCK("RandomUnlock");
 	public final String value;
 	private static final Map<String, ConsumableType> _VALUES;
 	static {

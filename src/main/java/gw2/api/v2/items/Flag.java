@@ -8,6 +8,8 @@ import com.google.common.collect.ImmutableMap.Builder;
 public enum Flag {
 	ACCOUNT_BIND_ON_USE("AccountBindOnUse"),
 	ACCOUNT_BOUND("AccountBound"),
+	BULK_CONSUME("BulkConsume"),
+	DELETE_WARNING("DeleteWarning"),
 	HIDE_SUFFIX("HideSuffix"),
 	MONSTER_ONLY("MonsterOnly"),
 	NO_MYSTIC_FORGE("NoMysticForge"),

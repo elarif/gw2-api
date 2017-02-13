@@ -7,19 +7,19 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 
 public class SkillId {
-	private static Cache<String, SkillId> CACHE = CacheBuilder.newBuilder().weakKeys().build();
+	private static Cache<Integer, SkillId> CACHE = CacheBuilder.newBuilder().weakKeys().build();
 
-	public final String value;
+	public final Integer value;
 
-	private SkillId(final String value) {
+	private SkillId(final Integer value) {
 		this.value = value;
 	}
 
-	public String getValue() {
+	public Integer getValue() {
 		return value;
 	}
 
-	public static SkillId valueOf(final String value) {
+	public static SkillId valueOf(final Integer value) {
 		SkillId result = null;
 		try {
 			result = CACHE.get(value, new Callable<SkillId>() {

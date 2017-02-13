@@ -28,7 +28,7 @@ public enum WeaponType {
 	LARGE_BUNDLE("LargeBundle"),
 	SMALL_BUNDLE("SmallBundle"),
 	TOY("Toy"),
-	TWO_HANDED_TOY("TwoHandedToy");
+	TOY_TWO_HANDED("ToyTwoHanded");
 	public final String value;
 	private static final Map<String, WeaponType> _VALUES;
 	static {

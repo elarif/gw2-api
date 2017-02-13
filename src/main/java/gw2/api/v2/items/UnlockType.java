@@ -14,7 +14,8 @@ CRAFTING_RECIPE("CraftingRecipe"),
 DYE("Dye"), 
 OUTFIT("Outfit"),
 GLIDER_SKIN("GliderSkin"),
-CHAMPION("Champion");
+CHAMPION("Champion"),
+SHARED_SLOT("SharedSlot");
 public final String value;
 private static final Map<String, UnlockType> _VALUES;
 static {

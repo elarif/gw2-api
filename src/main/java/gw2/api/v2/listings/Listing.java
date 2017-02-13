@@ -1,31 +1,32 @@
 package gw2.api.v2.listings;
 
-import gw2.api.v2.items.Id;
+import gw2.api.v2.items.Price;
+import gw2.api.v2.recipes.Count;
 
 public class Listing {
-	public final Id id;
-	public final Buy[] buys;
-	public final Sell[] sells;
+	public final Count listings;
+	public final Price unitPrice;
+	public final Count quantity;
 	private Listing(Builder builder) {
-	  this.id = builder.id;
-	  this.buys = builder.buys;
-	  this.sells = builder.sells;
+	  this.listings = builder.listings;
+	  this.unitPrice = builder.unitPrice;
+	  this.quantity = builder.quantity;
 	}
 	public static class Builder{
 
-		private Id id;
-		private Buy[] buys;
-		private Sell[] sells;
-		public Builder withId(Id id) {
-		  this.id = id;
+		private Count listings;
+		private Price unitPrice;
+		private Count quantity;
+		public Builder withListings(Count listings) {
+		  this.listings = listings;
 		  return this;
 		}
-		public Builder withBuys(Buy[] buys) {
-		  this.buys = buys;
+		public Builder withUnitPrice(Price unitPrice) {
+		  this.unitPrice = unitPrice;
 		  return this;
 		}
-		public Builder withSells(Sell[] sells) {
-		  this.sells = sells;
+		public Builder withQuantity(Count quantity) {
+		  this.quantity = quantity;
 		  return this;
 		}
 		public Listing build() {

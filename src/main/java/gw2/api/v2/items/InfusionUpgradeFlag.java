@@ -7,6 +7,8 @@ import com.google.common.collect.ImmutableMap.Builder;
 
 public enum InfusionUpgradeFlag {
 DEFENSE("Defense"),
+ENRICHMENT("Enrichment"),
+INFUSION("Infusion"),
 OFFENSE("Offense"),
 UTILITY("Utility"),
 AGONY("Agony");

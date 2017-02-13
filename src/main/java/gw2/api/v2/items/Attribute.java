@@ -6,6 +6,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMap.Builder;
 
 public enum Attribute {
+	AGONY_RESISTANCE("AgonyResistance"),
 	BOON_DURATION("BoonDuration"), 
 	CONDITION_DAMAGE("ConditionDamage"), 
 	CONDITION_DURATION("ConditionDuration"),

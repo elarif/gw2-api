@@ -6,7 +6,7 @@ public class Item {
 	public final Name name;
 	public final Icon icon;
 	public final Description description;
-	public final String type;
+	public final ItemType type;
 	public final Rarity rarity;
 	public final Level level;
 	public final Price vendorValue;
@@ -38,7 +38,7 @@ public class Item {
 		private Name name;
 		private Icon icon;
 		private Description description;
-		private String type;
+		private ItemType type;
 		private Rarity rarity;
 		private Level level;
 		private Price vendorValue;
@@ -67,7 +67,7 @@ public class Item {
 		  this.description = description;
 		  return this;
 		}
-		public Builder withType(String type) {
+		public Builder withType(ItemType type) {
 		  this.type = type;
 		  return this;
 		}

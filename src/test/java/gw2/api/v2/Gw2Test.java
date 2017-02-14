@@ -4,6 +4,8 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Paths;
 import java.text.MessageFormat;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 import org.junit.Ignore;
@@ -324,13 +326,7 @@ public class Gw2Test extends TestCase {
 		session.close();
 	    driver.close();
 	}
-	@Ignore
-	public void testGenerateSchema() throws JsonParseException, JsonMappingException, IOException, InterruptedException {
-		JsonSchemaGenerator schemaGen = new JsonSchemaGenerator(mapper);
-		JsonSchema schema = schemaGen.generateSchema(Item.class);
-		System.out.println(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(schema));
-		
-	}
+	
 	public void testConvertItems() throws JsonParseException, JsonMappingException, IOException, InterruptedException {
 		FileInputStream fis = new FileInputStream(Paths.get("./items.json").toFile());
 		Item[] myObjects = mapper.readValue(fis, Item[].class);
@@ -349,27 +345,26 @@ public class Gw2Test extends TestCase {
 	public void testInsertItemsIntoNeo4J() throws Exception{
 		FileInputStream fis = new FileInputStream(Paths.get("./items.json").toFile());
 		Item[] myObjects = mapper.readValue(fis, Item[].class);
-
-		String query = "WITH {json} as data\r\n" + 
-				"		UNWIND data.items as q\r\n" + 
-				"		MERGE (question:Question {id:q.question_id}) ON CREATE\r\n" + 
-				"		  SET question.title = q.title, question.share_link = q.share_link, question.favorite_count = q.favorite_count\r\n" + 
-				"\r\n" + 
-				"		MERGE (owner:User {id:q.owner.user_id}) ON CREATE SET owner.display_name = q.owner.display_name\r\n" + 
-				"		MERGE (owner)-[:ASKED]->(question)\r\n" + 
-				"\r\n" + 
-				"		FOREACH (tagName IN q.tags | MERGE (tag:Tag {name:tagName}) MERGE (question)-[:TAGGED]->(tag))\r\n" + 
-				"		FOREACH (a IN q.answers |\r\n" + 
-				"		   MERGE (question)<-[:ANSWERS]-(answer:Answer {id:a.answer_id})\r\n" + 
-				"		   MERGE (answerer:User {id:a.owner.user_id}) ON CREATE SET answerer.display_name = a.owner.display_name\r\n" + 
-				"		   MERGE (answer)<-[:PROVIDED]-(answerer)\r\n" + 
-				"		)";
+		String mergeItem = "UNWIND $data AS item MERGE (i:Item { id: item.id}) ON CREATE SET i.chat_link=item.chat_link, i.name=item.name, i.icon=item.icon, i.description=item.description, i.level=    item.level, i.vendor_value=item.vendor_value, i.default_skin=item.default_skin "
+				+ " MERGE (t:ItemType { name: item.type }) "
+				+ " MERGE (i)-[:TYPE]->(t) "
+				+ " MERGE (r:ItemRarity {name: item.rarity}) "
+				+ " MERGE (i)-[:RARITY]->(r) "
+				+ " FOREACH (flag in item.flags | MERGE (f:ItemFlag {name:flag}) MERGE (i)-[:HAS_FLAG]->(f))"
+				+ " FOREACH (game_type in item.game_types | MERGE (g:ItemGameType {name:game_type}) MERGE (i)-[:USABLE_IN]->(g))"
+				+ " FOREACH (restriction in item.restrictions| MERGE (rs:ItemRestriction {name:restriction}) MERGE (i)-[:RESTRICTED_TO]->(rs))";
+		;
+		
 		long begin = System.currentTimeMillis();
 		try (Transaction tx = session.beginTransaction()) {
+			int count = 0;
 			for (Item item : myObjects) {
-				tx.run(query,
-						Values.parameters("json", mapper.convertValue(item, Map.class))
-				);
+				if(count++%1000 == 0 && count > 0 ){
+					System.out.println(count++);
+					tx.success();
+				}
+					tx.run(mergeItem,
+							Values.parameters("data",mapper.convertValue(item, Map.class))); 
 			}
 			tx.success();
 		}
@@ -378,16 +373,25 @@ public class Gw2Test extends TestCase {
 	}
 	
 	public void testInsertRecipesIntoNeo4J() throws Exception{
-		FileInputStream fis = new FileInputStream(Paths.get("./recipes.json").toFile());
+		FileInputStream fis = new FileInputStream(Paths.get("./items.json").toFile());
 		Recipe[] myObjects = mapper.readValue(fis, Recipe[].class);
+		String mergeItem = "UNWIND $data AS recipe MERGE (r:Recipe{ id: recipe.id}) "
+				+ "ON CREATE SET r.chat_link=r.chat_link, r.min_rating=r.min_rating"
+				+ " MERGE (t:RecipeType { name: recipe.type }) "
+				+ " MERGE (r)-[:TYPE]->(t) "
+				+ " MERGE (i:Item {id: recipe.output_item_id}) "
+				+ " MERGE (r)-[:PRODUCES {count: recipe.output_item_count, duration: recipe.time_to_craft_ms }]->(i) "
+				+ " FOREACH (discipline in recipe.disciplines | MERGE (d:Discipline {name:discipline}) MERGE (r)-[:USED_BY]->(d))"
+				+ " FOREACH (flag in recipe.flags | MERGE (f:Flag {name:flag}) MERGE (r)-[:HAS_FLAG]->(f))"
+				+ " FOREACH (ingredient in recipe.ingredients| MERGE (i:Item {id:ingredient.item_id}) MERGE (r)-[:REQUIRES {count: ingredient.count}]->(i))"
+				+ " FOREACH (gingredient in recipe.guild_ingredients| MERGE (gi:GuildUpgrade {id:gingredient.item_id}) MERGE (r)-[:REQUIRES {count: gingredient.count}]->(gi))"		
+		;
 		
-		String query = "CREATE (:Recipe {id:{id},chat_link:{chat_link}, raw_json:{raw_json}})";
 		long begin = System.currentTimeMillis();
 		try (Transaction tx = session.beginTransaction()) {
 			for (Recipe item : myObjects) {
-				tx.run(query,
-						Values.parameters("id", item.id.value, "chat_link", item.chatLink.value, "raw_json", mapper.writeValueAsString(item))
-				);
+					tx.run(mergeItem,
+							Values.parameters("data",mapper.convertValue(item, Map.class))); 
 			}
 			tx.success();
 		}
@@ -395,5 +399,42 @@ public class Gw2Test extends TestCase {
 		System.out.print(MessageFormat.format("Inserted {0} nodes in {1} ms.", myObjects.length, end - begin));
 	}
 	
+	public void testInsertListingsIntoNeo4J() throws Exception{
+		FileInputStream fis = new FileInputStream(Paths.get("./items.json").toFile());
+		Listing[] myObjects = mapper.readValue(fis, Listing[].class);
+		String mergeItem = "UNWIND $data AS recipe MERGE (r:Recipe{ id: recipe.id}) "
+				+ "ON CREATE SET r.chat_link=r.chat_link, r.min_rating=r.min_rating"
+				+ " MERGE (t:RecipeType { name: recipe.type }) "
+				+ " MERGE (r)-[:TYPE]->(t) "
+				+ " MERGE (i:Item {id: recipe.output_item_id}) "
+				+ " MERGE (r)-[:PRODUCES {count: recipe.output_item_count, duration: recipe.time_to_craft_ms }]->(i) "
+				+ " FOREACH (discipline in recipe.disciplines | MERGE (d:Discipline {name:discipline}) MERGE (r)-[:USED_BY]->(d))"
+				+ " FOREACH (flag in recipe.flags | MERGE (f:Flag {name:flag}) MERGE (r)-[:HAS_FLAG]->(f))"
+				+ " FOREACH (ingredient in recipe.ingredients| MERGE (i:Item {id:ingredient.item_id}) MERGE (r)-[:REQUIRES {count: ingredient.count}]->(i))"
+				+ " FOREACH (gingredient in recipe.guild_ingredients| MERGE (gi:GuildUpgrade {id:gingredient.item_id}) MERGE (r)-[:REQUIRES {count: gingredient.count}]->(gi))"		
+		;
+		
+		long begin = System.currentTimeMillis();
+		try (Transaction tx = session.beginTransaction()) {
+			for (Listing item : myObjects) {
+					tx.run(mergeItem,
+							Values.parameters("data",mapper.convertValue(item, Map.class))); 
+			}
+			tx.success();
+		}
+		long end = System.currentTimeMillis();
+		System.out.print(MessageFormat.format("Inserted {0} nodes in {1} ms.", myObjects.length, end - begin));
+	}
+	
+	
+	public void testGenerateSchema() throws JsonParseException, JsonMappingException, IOException, InterruptedException {
+		JsonSchemaGenerator schemaGen = new JsonSchemaGenerator(mapper);
+		List<Class<? extends Object>> asList = Arrays.asList(Item.class, ArmorDetails.class, BackDetails.class, BagDetails.class, ConsumableDetails.class, ContainerDetails.class, GatheringToolDetails.class, GizmoDetails.class, MiniatureDetails.class, SalvageKitDetails.class, TrinketDetails.class, UpgradeComponentDetails.class, WeaponDetails.class, Recipe.class, Listing.class );
+		JsonSchema schema = null;
+		for (Class<? extends Object> class1 : asList) {
+			schema = schemaGen.generateSchema(class1);
+			System.out.println(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(schema));
+		}
+	}
 
 }

@@ -4,10 +4,12 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
+import java.net.ProtocolException;
 import java.net.URL;
 import java.text.MessageFormat;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutionException;
@@ -33,6 +35,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.guava.GuavaModule;
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 
 import gw2.api.v2.items.Item;
 import gw2.api.v2.recipes.Recipe;
@@ -41,8 +44,6 @@ public class MainWithHC {
 	private static final String V2_ITEMS = "https://api.guildwars2.com/v2/items";
 	public final static ObjectMapper mapper = new ObjectMapper().registerModule(new GuavaModule());
 	public final static int CHUNK_SIZE = 200;
-	public final static Driver driver = GraphDatabase.driver("bolt://localhost:7687",
-			AuthTokens.basic("neo4j", "bA6TASLw1qVqOhHrb0EA"));
 	private static final String ITEM_CYPHER = "UNWIND $data AS items FOREACH(item in items | MERGE (i:Item { id: item.id}) "
 			+ " ON CREATE SET i.chat_link=item.chat_link, i.name=item.name, i.icon=item.icon, i.description=item.description, i.level=    item.level, i.vendor_value=item.vendor_value, i.default_skin=item.default_skin "
 			+ " MERGE (t:ItemType { name: item.type }) " + " MERGE (i)-[:TYPE]->(t) "
@@ -63,7 +64,7 @@ public class MainWithHC {
 
 		public static void main(String[] args) throws InterruptedException, ExecutionException, IOException {
 		final int numberOfCores = Runtime.getRuntime().availableProcessors();
-		final double blockingCoefficient = 0.99;
+		final double blockingCoefficient = 0.9;
 		final int poolSize = (int) (numberOfCores / (1 - blockingCoefficient));
 
 		System.out.println("Number of Cores available is " + numberOfCores);
@@ -80,8 +81,9 @@ public class MainWithHC {
 		final long end = System.nanoTime();
 		System.out.println("Time (seconds) taken " + (end - start) / 1.0e9);
 		executorPool.shutdown();
-		driver.close();
 	}
+		
+	
 
 	private static <T extends Object> void listAndDetails(final CloseableHttpClient httpClient,
 			final ExecutorService executorPool, final String uri, final Class<T> responseClass, final String cypher)
@@ -97,13 +99,17 @@ public class MainWithHC {
 		for (String ids : strings.build()) {
 			_partitions.add(new Callable<String>() {
 				public String call() throws Exception {
+					final String spec = uri + "?ids=" + ids;
+					final Map<String, String> headers = ImmutableMap.of("Accept", "application/json");
 					try {
-
-						URL url = new URL(uri + "?ids=" + ids);
+					
+						URL url  = new URL(spec);
 						HttpURLConnection conn = (HttpURLConnection) url.openConnection();
 						conn.setRequestMethod("GET");
-						conn.setRequestProperty("Accept", "application/json");
-
+						for (String key : headers.keySet()) {
+							conn.setRequestProperty(key, headers.get(key));
+						}
+					
 						if (conn.getResponseCode() != 200) {
 							throw new RuntimeException("Failed : HTTP error code : "
 									+ conn.getResponseCode());
@@ -117,34 +123,32 @@ public class MainWithHC {
 						}
 						conn.disconnect();
 						return buf.toString();
-
+					
 					  } catch (MalformedURLException e) {
-
+					
 						throw new IllegalStateException(e);
-
+					
 					  } catch (IOException e) {
 						  throw new IllegalStateException(e);
-
+					
 					  }
 				}
+
+				
 			});
 		}
 		CompletionService<String> ecs = new ExecutorCompletionService<String>(executorPool);
 		final ImmutableList<Callable<String>> build = _partitions.build();
 		for (Callable<String> s : build)
 			ecs.submit(s);
+		
 		int n = build.size();
+		URL url = null;
+		HttpURLConnection conn = null;
 		for (int i = 0; i < n; ++i) {
 			String r = ecs.take().get();
 			if (r != null) {
-				URL url = new URL("http://localhost:7474/db/data/transaction/commit");
-				HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-				conn.setDoOutput(true);
-				conn.setRequestMethod("POST");
-				conn.setRequestProperty("Accept", "application/json; charset=UTF-8");
-				conn.setRequestProperty("Content-Type", "application/json");
-				conn.setRequestProperty("Authorization", "Basic "+Base64.getEncoder().encodeToString("neo4j:bA6TASLw1qVqOhHrb0EA".getBytes()));
-
+				final String spec = "http://localhost:7474/db/data/transaction/commit";
 				String input = MessageFormat.format("'{'\r\n" + 
 						"  \"statements\" : [ '{'\r\n" + 
 						"    \"statement\" : \"{0}\",\r\n" + 
@@ -153,10 +157,19 @@ public class MainWithHC {
 						"      }\r\n" + 
 						"  } ]\r\n" + 
 						"}", cypher, r);
+				Map<String, String> headers = ImmutableMap.of("Accept", "application/json; charset=UTF-8", "Content-Type", "application/json", "Authorization", "Basic "+Base64.getEncoder().encodeToString("neo4j:dt9LfmJAEmzKh9VZu6jD".getBytes()));
+				url = new URL(spec);
+				conn = (HttpURLConnection) url.openConnection();
+				conn.setDoOutput(true);
+				conn.setRequestMethod("POST");
+				for (String key : headers.keySet()) {
+					conn.setRequestProperty(key, headers.get(key));
+				}
+				
 				OutputStream os = conn.getOutputStream();
 				os.write(input.getBytes());
 				os.flush();
-
+				
 				if (conn.getResponseCode() != HttpURLConnection.HTTP_CREATED && conn.getResponseCode() != HttpURLConnection.HTTP_OK  ) {
 					throw new RuntimeException("Failed : HTTP error code : "
 						+ conn.getResponseCode());
@@ -164,6 +177,62 @@ public class MainWithHC {
 				conn.disconnect();
 			}
 		}
+	}
+
+
+
+	private static void httpPost(final String spec, String input, Map<String, String> headers)
+			throws MalformedURLException, IOException, ProtocolException {
+		URL url = new URL(spec);
+		HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+		conn.setDoOutput(true);
+		conn.setRequestMethod("POST");
+		for (String key : headers.keySet()) {
+			conn.setRequestProperty(key, headers.get(key));
+		}
+
+		OutputStream os = conn.getOutputStream();
+		os.write(input.getBytes());
+		os.flush();
+
+		if (conn.getResponseCode() != HttpURLConnection.HTTP_CREATED && conn.getResponseCode() != HttpURLConnection.HTTP_OK  ) {
+			throw new RuntimeException("Failed : HTTP error code : "
+				+ conn.getResponseCode());
+		}
+		conn.disconnect();
+	}
+	private static String httpGet(final String spec, final Map<String, String> headers ) {
+		try {
+
+			URL url = new URL(spec);
+			HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+			conn.setRequestMethod("GET");
+			for (String key : headers.keySet()) {
+				conn.setRequestProperty(key, headers.get(key));
+			}
+
+			if (conn.getResponseCode() != 200) {
+				throw new RuntimeException("Failed : HTTP error code : "
+						+ conn.getResponseCode());
+			}
+			BufferedInputStream bis = new BufferedInputStream(conn.getInputStream());
+			ByteArrayOutputStream buf = new ByteArrayOutputStream();
+			int result = bis.read();
+			while(result != -1) {
+			    buf.write((byte) result);
+			    result = bis.read();
+			}
+			conn.disconnect();
+			return buf.toString();
+
+		  } catch (MalformedURLException e) {
+
+			throw new IllegalStateException(e);
+
+		  } catch (IOException e) {
+			  throw new IllegalStateException(e);
+
+		  }
 	}
 
 	private static List<Integer> list(CloseableHttpClient httpClient, String uri) {
